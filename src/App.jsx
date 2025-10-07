@@ -23,12 +23,6 @@ function todayISO() {
   return `${yyyy}-${mm}-${dd}`
 }
 
-function endOfToday() {
-  const d = new Date()
-  d.setHours(23, 59, 59, 999)
-  return d.getTime()
-}
-
 export default function App() {
   const [tab, setTab] = useState('journal')
   const [authed, setAuthed] = useState(false)
@@ -37,12 +31,12 @@ export default function App() {
 
   const [form, setForm] = useState({
     date: todayISO(),
-    emotional_state: '',
-    physical_state: '',
-    social_connectedness: '',
-    accomplishment: '',
-    growth: '',
-    alignment: '',
+    emotional_state: 4,
+    physical_state: 4,
+    social_connectedness: 4,
+    accomplishment: 4,
+    growth: 4,
+    alignment: 4,
     task_1: '',
     task_2: '',
     task_3: '',
@@ -53,11 +47,8 @@ export default function App() {
   const [message, setMessage] = useState('')
   const [existingRowNumber, setExistingRowNumber] = useState(null)
 
-  const canEdit = useMemo(() => {
-    const isToday = form.date === todayISO()
-    const notExpired = Date.now() <= endOfToday()
-    return isToday && notExpired
-  }, [form.date])
+  // ✅ Allow editing any date now
+  const canEdit = useMemo(() => true, [form.date])
 
   useEffect(() => {
     const session = localStorage.getItem('wj_session')
@@ -73,34 +64,34 @@ export default function App() {
 
   useEffect(() => {
     if (!authed) return
-    loadToday()
+    loadEntry(form.date)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed])
+  }, [authed, form.date])
 
-  async function loadToday() {
+  async function loadEntry(date) {
     setLoading(true)
     setMessage('')
     try {
-      const json = await fetchToday(form.date)
+      const json = await fetchToday(date)
       if (json.ok && json.entry) {
         setExistingRowNumber(json.entry.rowNumber)
         setForm({
           date: json.entry.date,
-          emotional_state: json.entry.emotional_state || '',
-          physical_state: json.entry.physical_state || '',
-          social_connectedness: json.entry.social_connectedness || '',
-          accomplishment: json.entry.accomplishment || '',
-          growth: json.entry.growth || '',
-          alignment: json.entry.alignment || '',
+          emotional_state: Number(json.entry.emotional_state) || 4,
+          physical_state: Number(json.entry.physical_state) || 4,
+          social_connectedness: Number(json.entry.social_connectedness) || 4,
+          accomplishment: Number(json.entry.accomplishment) || 4,
+          growth: Number(json.entry.growth) || 4,
+          alignment: Number(json.entry.alignment) || 4,
           task_1: json.entry.task_1 || '',
           task_2: json.entry.task_2 || '',
           task_3: json.entry.task_3 || '',
           proud_of: json.entry.proud_of || '',
         })
-        setMessage('Loaded today’s saved entry.')
+        setMessage('Loaded saved entry.')
       } else if (json.ok) {
         setExistingRowNumber(null)
-        setMessage('No entry yet for today.')
+        setMessage('No entry yet for this date.')
       } else {
         setMessage(json.error || 'Failed to load entry.')
       }
@@ -115,7 +106,7 @@ export default function App() {
     e.preventDefault()
     if (usernameInput === ALLOWED_USERNAME && passwordInput === ALLOWED_PASSWORD) {
       setAuthed(true)
-      localStorage.setItem('wj_session', JSON.stringify({ username: ALLOWED_USERNAME, expiresAt: endOfToday() }))
+      localStorage.setItem('wj_session', JSON.stringify({ username: ALLOWED_USERNAME, expiresAt: Date.now() + 24*60*60*1000 }))
     } else {
       setMessage('Invalid credentials.')
     }
@@ -137,13 +128,7 @@ export default function App() {
     const likertKeys = likertItems.map(i => i.key)
     for (const k of likertKeys) {
       const n = Number(form[k])
-      if (!Number.isInteger(n) || n < 1 || n > 6) return `Please rate ${k.replace('_',' ')} from 1 to 6.`
-    }
-    const textKeys = ['task_1','task_2','task_3','proud_of']
-    for (const k of textKeys) {
-      const t = (form[k] || '').trim()
-      if (t.length < 5) return `“${labelFor(k)}” should not be empty.`
-      if (t.length > 600) return `“${labelFor(k)}” is a bit long; please keep it concise.`
+      if (!Number.isInteger(n) || n < 1 || n > 7) return `Please rate ${k.replace('_',' ')} from 1 to 7.`
     }
     return null
   }
@@ -159,7 +144,7 @@ export default function App() {
       const json = await saveEntry(form)
       if (json.ok) {
         setExistingRowNumber(json.rowNumber || existingRowNumber)
-        setMessage(json.updated ? 'Entry updated for today.' : 'Entry saved for today.')
+        setMessage(json.updated ? 'Entry updated.' : 'Entry saved.')
       } else {
         setMessage(json.error || 'Failed to save.')
       }
@@ -179,11 +164,11 @@ export default function App() {
 
   // Inject iOS slider CSS
   useEffect(() => {
-    const style = document.createElement('style');
-    style.textContent = sliderCSS;
-    document.head.appendChild(style);
-    return () => style.remove();
-  }, []);
+    const style = document.createElement('style')
+    style.textContent = sliderCSS
+    document.head.appendChild(style)
+    return () => style.remove()
+  }, [])
 
   return (
     <div style={styles.page}>
@@ -201,7 +186,7 @@ export default function App() {
           </form>
         ) : (
           <>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', marginBottom:20 }}>
               <div style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
                 <p style={{ margin:0, opacity:0.8 }}>Signed in as <strong>{ALLOWED_USERNAME}</strong></p>
                 <nav style={{ display:'flex', gap:8 }}>
@@ -217,10 +202,11 @@ export default function App() {
                 <label style={styles.label}>Date</label>
                 <input style={styles.input} type="date" value={form.date} onChange={e=>setField('date', e.target.value)} />
 
-                <div style={styles.section}>
-                  {likertItems.map(item => (
-                    <div key={item.key} style={styles.likertRow}>
-                      <div style={{flex:1}}>
+                <div style={styles.sectionHeader}>MOOD</div>
+                <div style={styles.groupBox}>
+                  {likertItems.map((item, i) => (
+                    <div key={item.key} style={styles.cell}>
+                      <div>
                         <div style={styles.itemLabel}>{item.label}</div>
                         <div style={styles.prompt}>{item.prompt}</div>
                       </div>
@@ -228,9 +214,9 @@ export default function App() {
                         <input
                           type="range"
                           min="1"
-                          max="6"
+                          max="7"
                           step="1"
-                          value={form[item.key] || 1}
+                          value={form[item.key] || 4}
                           onChange={(e)=>setField(item.key, Number(e.target.value))}
                           onInput={(e)=> {
                             const percent = ((e.target.value - e.target.min) / (e.target.max - e.target.min)) * 100;
@@ -240,29 +226,23 @@ export default function App() {
                         />
                         <div style={styles.sliderLabels}>
                           <span>1</span>
-                          <span>6</span>
+                          <span>7</span>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div style={styles.section}>
-                  {[
-                    { key: 'task_1', title: 'Task 1', desc: 'Briefly describe the most significant task you worked on today.' },
-                    { key: 'task_2', title: 'Task 2', desc: 'Briefly describe another meaningful task you completed today.' },
-                    { key: 'task_3', title: 'Task 3', desc: 'Briefly describe one more task you spent time on today.' },
-                    { key: 'proud_of', title: 'Proud Of', desc: 'What are you most proud of achieving or experiencing today?' },
-                  ].map(item => (
-                    <div key={item.key} style={styles.openEndedCard}>
-                      <div style={styles.openEndedTitle}>{item.title}</div>
-                      <div style={styles.openEndedDescription}>{item.desc}</div>
+                <div style={styles.sectionHeader}>REFLECTIONS</div>
+                <div style={styles.groupBox}>
+                  {['task_1','task_2','task_3','proud_of'].map(k => (
+                    <div key={k} style={styles.cell}>
+                      <div style={styles.itemLabel}>{labelFor(k)}</div>
                       <input
-                        type="text"
-                        style={styles.openEndedInput}
-                        value={form[item.key]}
-                        onChange={e => setField(item.key, e.target.value)}
-                        placeholder="Reflection"
+                        style={styles.textField}
+                        value={form[k]}
+                        onChange={e=>setField(k, e.target.value)}
+                        placeholder="type reflection..."
                       />
                     </div>
                   ))}
@@ -271,11 +251,8 @@ export default function App() {
                 {message && <p style={styles.message}>{message}</p>}
 
                 <button style={{...styles.button, opacity: loading?0.7:1}} type="submit" disabled={loading || !canEdit}>
-                  {existingRowNumber ? (canEdit ? 'Update today’s entry' : 'Editing closed for today') : 'Submit today’s entry'}
+                  {existingRowNumber ? 'Update entry' : 'Submit entry'}
                 </button>
-                {!canEdit && (
-                  <p style={{...styles.message, fontSize:12}}>Editing is disabled after the day ends. You can still view your saved entry.</p>
-                )}
               </form>
             ) : (
               <History />
@@ -319,7 +296,7 @@ input[type="range"]::-moz-range-thumb {
 input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(to right, #007AFF var(--percent, 0%), #d1d1d6 var(--percent, 0%));
+  background: linear-gradient(to right, #007AFF var(--percent, 50%), #d1d1d6 var(--percent, 50%));
 }
 input[type="range"]::-moz-range-track {
   height: 4px;
@@ -335,26 +312,19 @@ const styles = {
     alignItems:'center',
     justifyContent:'center',
     padding:'32px',
-    background: 'linear-gradient(180deg, #f6f7f9 0%, #e9ecf0 100%)',
+    background: '#f2f2f7',
     fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
   },
   card: {
     width: '100%',
     maxWidth: 700,
-    background: 'rgba(255, 255, 255, 0.7)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    borderRadius: 20,
-    padding: '32px 28px',
-    boxShadow: '0 4px 30px rgba(0,0,0,0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.5)',
   },
   title: {
-    fontSize: 28,
-    fontWeight: 600,
-    margin: '0 0 24px',
+    fontSize: 34,
+    fontWeight: 700,
+    margin: '0 0 20px',
     color: '#111',
-    letterSpacing: '-0.3px'
+    letterSpacing: '-0.5px'
   },
   form: { display:'grid', gap: 20 },
   label: {
@@ -369,28 +339,36 @@ const styles = {
     padding: '10px 12px',
     borderRadius: 10,
     border: '1px solid #d1d1d6',
-    background: 'rgba(255,255,255,0.8)',
+    background: '#fff',
     outline: 'none',
     fontSize: 14,
     transition: 'border-color 0.2s',
   },
-  section: { display:'grid', gap: 16 },
-  likertRow: {
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#6e6e73',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginTop: 10,
+  },
+  groupBox: {
+    background: '#fff',
+    borderRadius: 14,
+    overflow: 'hidden',
+    border: '1px solid #e5e5ea',
+  },
+  cell: {
+    padding: '16px 18px',
     display:'flex',
     flexDirection:'column',
-    gap: 6,
-    padding: '16px 18px',
-    border: '1px solid #e5e5ea',
-    borderRadius: 14,
-    background: 'rgba(250, 250, 250, 0.8)',
+    gap: 10,
+    borderBottom: '1px solid #e5e5ea',
   },
   itemLabel: { fontWeight: 600, fontSize: 15, color: '#111' },
   prompt: { fontSize: 13, opacity: 0.7, color: '#444', marginTop: 2 },
-  sliderWrapper: { width: '100%', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 },
-  slider: {
-    width: '100%',
-    cursor: 'pointer',
-  },
+  sliderWrapper: { width: '100%', display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 },
+  slider: { width: '100%', cursor: 'pointer' },
   sliderLabels: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -398,34 +376,14 @@ const styles = {
     opacity: 0.6,
     color: '#444'
   },
-  openEndedCard: {
-    display: 'grid',
-    gap: 6,
-    padding: '16px 18px',
-    border: '1px solid #e5e5ea',
-    borderRadius: 14,
-    background: 'rgba(250, 250, 250, 0.8)',
-  },
-  openEndedTitle: {
-    fontWeight: 600,
-    fontSize: 15,
-    color: '#111',
-  },
-  openEndedDescription: {
-    fontSize: 13,
-    opacity: 0.7,
-    color: '#444',
-  },
-  openEndedInput: {
-    marginTop: 8,
+  textField: {
     width: '100%',
     padding: '10px 12px',
     borderRadius: 10,
     border: '1px solid #d1d1d6',
-    background: '#f5f5f7',
-    fontSize: 14,
+    background: '#f9f9f9',
     outline: 'none',
-    transition: 'border-color 0.2s',
+    fontSize: 14,
   },
   button: {
     marginTop: 8,
